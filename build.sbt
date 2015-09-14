@@ -7,8 +7,7 @@ scalaVersion := "2.11.7"
 // Change this to another test framework if you prefer
 libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-  "org.eclipse.jetty" % "jetty-server" % "9.3.2.v20150730",
-  "io.undertow" % "undertow-core" % "1.3.0.Beta9",
+  "io.netty" % "netty-all" % "4.0.30.Final",
   "ch.qos.logback" % "logback-classic" % "1.1.3",
   "com.typesafe" % "config" % "1.3.0")
 
