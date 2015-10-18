@@ -12,7 +12,7 @@ import io.netty.util.CharsetUtil
 import scala.collection.JavaConversions._
 
 
-class HttpServerHandler(var request: HttpRequest) extends SimpleChannelInboundHandler[Object] {
+class HttpServerHandler(var request: HttpRequest) extends SimpleChannelInboundHandler[HttpObject] {
 
   /** Buffer that stores the response content */
   val buf = new StringBuilder()
@@ -21,79 +21,78 @@ class HttpServerHandler(var request: HttpRequest) extends SimpleChannelInboundHa
     ctx.flush()
   }
 
-  override def channelRead0(ctx: ChannelHandlerContext, msg: Object) = {
-    if (msg.isInstanceOf[HttpRequest]) {
-      request = msg.asInstanceOf[HttpRequest]
-
-      if (HttpHeaders.is100ContinueExpected(request)) {
-        send100Continue(ctx)
-      }
-
-      buf.setLength(0);
-      buf.append("WELCOME TO Cling WEB SERVER\r\n")
-      buf.append("===================================\r\n")
-      buf.append("VERSION: ").append(request.getProtocolVersion).append("\r\n")
-      buf.append("HOSTNAME: ").append(HttpHeaders.getHost(request, "unknown")).append("\r\n")
-      buf.append("REQUEST_URI: ").append(request.getUri).append("\r\n\r\n")
-
-      val headers = request.headers()
-      if (!headers.isEmpty()) {
-
-        for (h <- headers) {
-          val key = h.getKey()
-          val value = h.getValue()
-          buf.append("HEADER: ").append(key).append(" = ").append(value).append("\r\n")
-        }
-        buf.append("\r\n")
-      }
-
-      val queryStringDecoder = new QueryStringDecoder(request.getUri)
-      val params = queryStringDecoder.parameters()
-      if (!params.isEmpty) {
-        for (p <- params.entrySet()) {
-          val key = p.getKey
-          val vals = p.getValue
-          for (vall <- vals) {
-            buf.append("PARAM: ").append(key).append(" = ").append(vall).append("\r\n")
-          }
-        }
-        buf.append("\r\n")
-      }
-
-      appendDecoderResult(buf, request)
+  private def handleRequest(request: HttpRequest) = {
+    if (HttpHeaders.is100ContinueExpected(request)) {
+      send100Continue(ctx)
     }
 
-    if (msg.isInstanceOf[HttpContent]) {
-      val httpContent = msg.asInstanceOf[HttpContent]
+    buf.setLength(0);
+    buf.append("WELCOME TO Cling WEB SERVER\r\n")
+    buf.append("===================================\r\n")
+    buf.append("VERSION: ").append(request.getProtocolVersion).append("\r\n")
+    buf.append("HOSTNAME: ").append(HttpHeaders.getHost(request, "unknown")).append("\r\n")
+    buf.append("REQUEST_URI: ").append(request.getUri).append("\r\n\r\n")
 
-      val content = httpContent.content()
-      if (content.isReadable()) {
-        buf.append("CONTENT: ")
-        buf.append(content.toString(CharsetUtil.UTF_8))
-        buf.append("\r\n")
-        appendDecoderResult(buf, request)
+    val headers = request.headers()
+    if (!headers.isEmpty()) {
+
+      for (h <- headers) {
+        val key = h.getKey()
+        val value = h.getValue()
+        buf.append("HEADER: ").append(key).append(" = ").append(value).append("\r\n")
       }
+      buf.append("\r\n")
+    }
 
-      if (msg.isInstanceOf[LastHttpContent]) {
-        buf.append("END OF CONTENT\r\n")
+    val queryStringDecoder = new QueryStringDecoder(request.getUri)
+    val params = queryStringDecoder.parameters()
+    if (!params.isEmpty) {
+      for (p <- params.entrySet()) {
+        val key = p.getKey
+        val vals = p.getValue
+        for (vall <- vals) {
+          buf.append("PARAM: ").append(key).append(" = ").append(vall).append("\r\n")
+        }
+      }
+      buf.append("\r\n")
+    }
 
-        val trailer = msg.asInstanceOf[LastHttpContent]
-        if (!trailer.trailingHeaders().isEmpty()) {
+    appendDecoderResult(buf, request)
+  }
+
+  override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject) = {
+    msg match {
+      case request: HttpRequest =>
+        handleRequest(request)
+      case httpContent: HttpContent =>
+        val content = httpContent.content()
+        if (content.isReadable()) {
+          buf.append("CONTENT: ")
+          buf.append(content.toString(CharsetUtil.UTF_8))
           buf.append("\r\n")
-          for (name <- trailer.trailingHeaders().names()) {
-            for (value <- trailer.trailingHeaders().getAll(name)) {
-              buf.append("TRAILING HEADER: ")
-              buf.append(name).append(" = ").append(value).append("\r\n")
+          appendDecoderResult(buf, request)
+        }
+
+        if (msg.isInstanceOf[LastHttpContent]) {
+          buf.append("END OF CONTENT\r\n")
+
+          val trailer = msg.asInstanceOf[LastHttpContent]
+          if (!trailer.trailingHeaders().isEmpty()) {
+            buf.append("\r\n")
+            for (name <- trailer.trailingHeaders().names()) {
+              for (value <- trailer.trailingHeaders().getAll(name)) {
+                buf.append("TRAILING HEADER: ")
+                buf.append(name).append(" = ").append(value).append("\r\n")
+              }
             }
+            buf.append("\r\n")
           }
-          buf.append("\r\n")
-        }
 
-        if (!writeResponse(trailer, ctx)) {
-          // If keep-alive is off, close the connection once the content is fully written.
-          ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE)
+          if (!writeResponse(trailer, ctx)) {
+            // If keep-alive is off, close the connection once the content is fully written.
+            ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE)
+          }
         }
-      }
     }
   }
 
