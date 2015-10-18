@@ -127,17 +127,17 @@ class HttpServerHandler(var request: HttpRequest) extends SimpleChannelInboundHa
     // Encode the cookie.
     val cookieString = request.headers().get(COOKIE)
     if (cookieString != null) {
-      val cookies = new ServerCookieDecoder().decode(cookieString)
+      val cookies = ServerCookieDecoder.STRICT.decode(cookieString)
       if (!cookies.isEmpty()) {
         // Reset the cookies if necessary.
         for (cookie <- cookies) {
-          response.headers().add(SET_COOKIE, new ServerCookieEncoder().encode(cookie))
+          response.headers().add(SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie))
         }
       }
     } else {
       // Browser sent no cookie.  Add some.
-      response.headers().add(SET_COOKIE, new ServerCookieEncoder().encode("key1", "value1"))
-      response.headers().add(SET_COOKIE, new ServerCookieEncoder().encode("key2", "value2"))
+      response.headers().add(SET_COOKIE, ServerCookieEncoder.STRICT.encode("key1", "value1"))
+      response.headers().add(SET_COOKIE, ServerCookieEncoder.STRICT.encode("key2", "value2"))
     }
 
     // Write the response.
